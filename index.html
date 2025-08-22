@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IG Follow Checker — client‑side, password‑free</title>
+  <meta name="description" content="App 100% client‑side para comparar seguidores/seguidos de Instagram usando tu exportación oficial (JSON o HTML). No pide contraseña." />
+  <style>
+    :root{--bg:#0b1220;--card:#111a2b;--muted:#7f8ca8;--text:#e6eefc;--accent:#6ea8ff;--ok:#12b886;--warn:#ffb020;--danger:#ff6b6b;--border:#21304a}
+    *{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#0b1220,#0a0f1c);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
+    a{color:var(--accent)} code,kbd,pre{font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .wrap{max-width:1100px;margin:0 auto;padding:32px}
+    .grid{display:grid;gap:16px}
+    @media (min-width:900px){.grid-2{grid-template-columns:1fr 1fr}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .title{font-weight:800;font-size:clamp(24px,2.8vw,34px);letter-spacing:.3px;margin:0 0 6px}
+    .muted{color:var(--muted)}
+    .pill{display:inline-flex;gap:10px;align-items:center;border:1px solid var(--border);background:#0c1526;padding:8px 12px;border-radius:999px}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;border:1px solid var(--border);background:#0c1526;color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer}
+    .btn:hover{border-color:#38507c}
+    .btn.primary{background:linear-gradient(180deg,#1a2a47,#13243f);border-color:#2a4270}
+    .btn.ghost{background:transparent}
+    .btn-row{display:flex;flex-wrap:wrap;gap:10px}
+    .drop{border:2px dashed #2b3c5f;border-radius:16px;padding:16px;text-align:center;background:#0c1526}
+    .drop.drag{background:#0e1a33;border-color:#3f66b2}
+    input[type="file"]{display:none}
+    .stat{display:flex;gap:8px;align-items:center}
+    .stat .dot{width:10px;height:10px;border-radius:50%}
+    .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.danger{background:var(--danger)} .dot.info{background:var(--accent)}
+    table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    th,td{text-align:left;padding:10px 12px}
+    thead th{font-size:14px;color:#b7c4df}
+    tbody tr{background:#0c1526;border:1px solid var(--border)}
+    tbody td:first-child{border-top-left-radius:10px;border-bottom-left-radius:10px}
+    tbody td:last-child{border-top-right-radius:10px;border-bottom-right-radius:10px}
+    .search{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#0c1526;color:var(--text)}
+    .footer{margin-top:20px;color:#9fb1d3;font-size:13px}
+    .small{font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="wrap grid" style="gap:24px">
+    <header class="grid card" style="gap:10px">
+      <h1 class="title">IG Follow Checker <span class="muted">— client‑side, password‑free</span></h1>
+      <p class="muted">Sube tus archivos oficiales de Instagram (<strong>following.json</strong>/<strong>followers_1.json</strong>) o sus versiones <strong>HTML</strong>. Todo se procesa <strong>100% en tu navegador</strong> — no se envía nada a servidores.</p>
+      <div class="btn-row">
+        <label class="btn primary"><input id="file-following" type="file" accept=".json,.html,.htm" />Cargar <strong>Seguidos</strong> (following)</label>
+        <label class="btn primary"><input id="file-followers" type="file" accept=".json,.html,.htm" />Cargar <strong>Seguidores</strong> (followers)</label>
+        <button class="btn" id="demo">Probar con demo</button>
+        <button class="btn ghost" id="reset">Reiniciar</button>
+      </div>
+      <div class="grid grid-2">
+        <div class="pill"><span class="stat"><span class="dot info"></span><strong>Seguidos</strong>:</span> <span id="count-following">0</span></div>
+        <div class="pill"><span class="stat"><span class="dot info"></span><strong>Seguidores</strong>:</span> <span id="count-followers">0</span></div>
+      </div>
+    </header>
+
+    <section class="card grid" style="gap:16px">
+      <div class="grid grid-2">
+        <div class="pill"><span class="stat"><span class="dot.warn dot warn"></span><strong>Yo sigo, NO me siguen</strong>:</span> <span id="count-nfb">0</span></div>
+        <div class="pill"><span class="stat"><span class="dot ok"></span><strong>Mutuos</strong>:</span> <span id="count-mutual">0</span></div>
+      </div>
+      <div class="btn-row">
+        <input id="search" class="search" placeholder="Buscar usuario… (enter para limpiar)" />
+        <button id="dl-nfb" class="btn">Descargar CSV — Yo sigo, NO me siguen</button>
+        <button id="dl-mutual" class="btn">Descargar CSV — Mutuos</button>
+        <button id="dl-theyonly" class="btn">Descargar CSV — Ellos me siguen, yo no</button>
+      </div>
+      <div id="table-wrap" class="grid" style="gap:8px">
+        <table>
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Perfil</th>
+              <th class="small">Estado</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div class="btn-row">
+          <button id="prev" class="btn">⟵ Anterior</button>
+          <span class="muted small" id="pageinfo">Página 1</span>
+          <button id="next" class="btn">Siguiente ⟶</button>
+        </div>
+      </div>
+      <p class="footer">Consejo: para obtener los archivos, ve a <em>Instagram → Centro de cuentas → Tu información y permisos → Descargar tu información</em> y selecciona <strong>Descargar en tu dispositivo</strong>.</p>
+    </section>
+  </div>
+
+  <script>
+    // --- Utilities
+    const $ = sel => document.querySelector(sel);
+    const byId = id => document.getElementById(id);
+
+    const NON_USER_PATHS = new Set(["accounts","explore","reels","stories","p","direct","tv","challenge","oauth","about","developer","channels"]);
+
+    function parseFollowersJSON(obj){
+      // followers_1.json => array[{ string_list_data:[{value:username}] }]
+      const out = new Set();
+      if (Array.isArray(obj)){
+        for (const item of obj){
+          const v = item?.string_list_data?.[0]?.value;
+          if (v) out.add(v.toLowerCase());
+        }
+      } else {
+        // Some exports may be wrapped differently
+        const arr = obj?.followers || obj?.relationships_followers || [];
+        for (const item of arr){
+          const v = item?.string_list_data?.[0]?.value;
+          if (v) out.add(v.toLowerCase());
+        }
+      }
+      return out;
+    }
+
+    function parseFollowingJSON(obj){
+      // following.json => { relationships_following: [ { string_list_data:[{value:username}] } ] }
+      const out = new Set();
+      const arr = obj?.relationships_following || obj || [];
+      if (Array.isArray(arr)){
+        for (const item of arr){
+          const v = item?.string_list_data?.[0]?.value;
+          if (v) out.add(v.toLowerCase());
+        }
+      }
+      return out;
+    }
+
+    function parseHTMLtoUsers(html){
+      const out = new Set();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const links = doc.querySelectorAll('a[href*="instagram.com/"]');
+      for (const a of links){
+        try{
+          const url = new URL(a.href);
+          let u = url.pathname.replace(/^\//,'').split('/')[0];
+          if (!u) continue;
+          u = u.toLowerCase();
+          if (!NON_USER_PATHS.has(u)) out.add(u);
+        }catch{}
+      }
+      return out;
+    }
+
+    function readFileAsText(file){
+      return new Promise((resolve,reject)=>{
+        const fr = new FileReader();
+        fr.onerror = () => reject(fr.error);
+        fr.onload = () => resolve(fr.result);
+        fr.readAsText(file);
+      });
+    }
+
+    function downloadCSV(filename, rows){
+      const header = ['username','perfil'];
+      const body = rows.map(u => [u, `https://instagram.com/${u}`]);
+      const csv = [header, ...body].map(r => r.map(x => '"'+String(x).replaceAll('"','""')+'"').join(',')).join('\r\n');
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // --- State
+    let followers = new Set();
+    let following = new Set();
+    let results = { nfb: [], mutual: [], theyonly: [] }; // arrays (sorted)
+    let view = 'nfb';
+    let page = 1, pageSize = 50; // pagination
+    let filtered = null; // array or null
+
+    function recalc(){
+      const f1 = followers; const f2 = following;
+      const mutual = [...new Set([...f1].filter(x => f2.has(x)))].sort();
+      const nfb =   [...new Set([...f2].filter(x => !f1.has(x)))].sort();
+      const they =  [...new Set([...f1].filter(x => !f2.has(x)))].sort();
+      results = { nfb, mutual, theyonly: they };
+      byId('count-followers').textContent = f1.size;
+      byId('count-following').textContent = f2.size;
+      byId('count-nfb').textContent = nfb.length;
+      byId('count-mutual').textContent = mutual.length;
+      page = 1; filtered = null; render();
+    }
+
+    function rows(){
+      const src = filtered ?? results[view];
+      const start = (page-1)*pageSize; const end = start + pageSize;
+      return src.slice(start,end).map(u => ({u, url:`https://instagram.com/${u}`, status:viewLabel(view)}));
+    }
+
+    function viewLabel(v){
+      return v==='nfb' ? 'No me sigue' : (v==='mutual' ? 'Mutuo' : 'Me sigue, no lo sigo');
+    }
+
+    function render(){
+      const tbody = byId('tbody');
+      tbody.innerHTML = '';
+      for (const r of rows()){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>@${r.u}</td><td><a href="${r.url}" target="_blank" rel="noopener">${r.url}</a></td><td class="small">${r.status}</td>`;
+        tbody.appendChild(tr);
+      }
+      const total = (filtered ?? results[view]).length;
+      const maxp = Math.max(1, Math.ceil(total / pageSize));
+      byId('pageinfo').textContent = `Página ${page} / ${maxp} — ${total} elementos`;
+      byId('prev').disabled = page<=1; byId('next').disabled = page>=maxp;
+    }
+
+    // File inputs
+    byId('file-following').addEventListener('change', async (ev)=>{
+      const f = ev.target.files?.[0]; if (!f) return;
+      const text = await readFileAsText(f);
+      try{
+        const obj = JSON.parse(text);
+        following = parseFollowingJSON(obj);
+      }catch{
+        following = parseHTMLtoUsers(text);
+      }
+      recalc();
+    });
+
+    byId('file-followers').addEventListener('change', async (ev)=>{
+      const f = ev.target.files?.[0]; if (!f) return;
+      const text = await readFileAsText(f);
+      try{
+        const obj = JSON.parse(text);
+        followers = parseFollowersJSON(obj);
+      }catch{
+        followers = parseHTMLtoUsers(text);
+      }
+      recalc();
+    });
+
+    // Search
+    byId('search').addEventListener('input', (e)=>{
+      const q = e.target.value.trim().toLowerCase();
+      const base = results[view];
+      filtered = q ? base.filter(u => u.includes(q)) : null;
+      page = 1; render();
+    });
+    byId('search').addEventListener('keydown', (e)=>{ if (e.key==='Enter'){ e.target.value=''; filtered=null; page=1; render(); }});
+
+    // Pagination
+    byId('prev').addEventListener('click', ()=>{ if (page>1){ page--; render(); }});
+    byId('next').addEventListener('click', ()=>{ page++; render(); });
+
+    // Downloads
+    byId('dl-nfb').addEventListener('click', ()=> downloadCSV('yo_sigo_pero_no_me_sigue.csv', results.nfb));
+    byId('dl-mutual').addEventListener('click', ()=> downloadCSV('mutuos.csv', results.mutual));
+    byId('dl-theyonly').addEventListener('click', ()=> downloadCSV('me_sigue_pero_yo_no_lo_sigo.csv', results.theyonly));
+
+    // Demo dataset (small)
+    byId('demo').addEventListener('click', ()=>{
+      following = new Set(['ana','bruno','carla','diego','eva','fer']);
+      followers = new Set(['ana','carla','luis','maria','fer']);
+      recalc();
+    });
+
+    // Reset
+    byId('reset').addEventListener('click', ()=>{
+      followers = new Set(); following = new Set();
+      results = { nfb:[], mutual:[], theyonly:[] };
+      page = 1; filtered = null;
+      byId('file-following').value = '';
+      byId('file-followers').value = '';
+      recalc();
+    });
+
+    // Switch views by clicking the stat pills (nice UX)
+    document.querySelectorAll('.pill').forEach((el)=>{
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', ()=>{
+        if (el.textContent.includes('Yo sigo, NO me siguen')) view='nfb';
+        else if (el.textContent.includes('Mutuos')) view='mutual';
+        else view='nfb';
+        page=1; filtered=null; render();
+      });
+    });
+
+    // Initial render
+    render();
+  </script>
+</body>
+</html>
